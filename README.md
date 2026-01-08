@@ -41,8 +41,3 @@
 ## 捐赠
 - 如果你觉得此系统好用的话，请我喝一杯82年的凉白开吧，感谢！
 
--支付宝-
-# <img src="https://raw.githubusercontent.com/xiaomeng9597/webfiles/refs/heads/main/zfb.jpg" alt="支付宝收款码" width="200" />
-
--微信-
-# <img src="https://raw.githubusercontent.com/xiaomeng9597/webfiles/refs/heads/main/weixin.jpg" alt="微信收款码" width="200" />
