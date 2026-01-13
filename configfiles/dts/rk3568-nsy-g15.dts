@@ -1,343 +1,383 @@
+// 开源协议声明：兼容 GPL-2.0 协议或 MIT 协议
 // SPDX-License-Identifier: (GPL-2.0+ OR MIT)
 
+// 声明设备树版本为 v1
 /dts-v1/;
 
-#include <dt-bindings/gpio/gpio.h>
-#include <dt-bindings/pwm/pwm.h>
-#include <dt-bindings/leds/common.h>
-#include <dt-bindings/input/input.h>
-#include <dt-bindings/soc/rockchip,vop2.h>
-#include <dt-bindings/pinctrl/rockchip.h>
-#include <rockchip/rk3568.dtsi>
-#include "rk3568-ip.dtsi"
-#include "rk3568-ip-rk809.dtsi"
-#include "rk3568-ramoops.dtsi"
+// 引入必要的设备树绑定头文件（定义GPIO、PWM、LED等常量和宏）
+#include <dt-bindings/gpio/gpio.h>        // GPIO 相关常量（如 GPIO_ACTIVE_HIGH）
+#include <dt-bindings/pwm/pwm.h>          // PWM 相关常量
+#include <dt-bindings/leds/common.h>      // LED 相关常量
+#include <dt-bindings/input/input.h>      // 输入设备（按键等）相关常量
+#include <dt-bindings/soc/rockchip,vop2.h>// Rockchip VOP2 显示控制器相关常量
+#include <dt-bindings/pinctrl/rockchip.h> // Rockchip 引脚控制相关常量
+#include <rockchip/rk3568.dtsi>           // RK3568 芯片级通用设备树片段（核心外设默认配置）
+#include "rk3568-ip.dtsi"                 // 板级通用设备树片段（NSY-G15 基础板配置）
+#include "rk3568-ip-rk809.dtsi"           // RK809 PMIC 电源管理芯片板级配置
+#include "rk3568-ramoops.dtsi"            // Ramoops 崩溃日志存储相关配置
 
 / {
+	// 设备型号声明（内核识别设备名称）
 	model = "NSY-G15 Router";
+	// 兼容属性（优先匹配板级驱动，再匹配芯片级驱动）
 	compatible = "nsy,g15", "rockchip,rk3568";
 
+	// 设备别名（简化外设引用，方便内核和应用程序查找设备）
 	aliases {
-		ethernet0 = &gmac0;
-		ethernet1 = &gmac1;
-		mmc0 = &sdhci;
+		ethernet0 = &gmac0;  // 以太网0 别名指向 gmac0 控制器
+		ethernet1 = &gmac1;  // 以太网1 别名指向 gmac1 控制器
+		mmc0 = &sdhci;       // MMC0 别名指向 sdhci（eMMC 控制器）
 	};
 
+	// 启动配置选择（指定系统控制台输出端口）
 	chosen: chosen {
+		// 标准输出路径：串口2，波特率1500000，无校验位，8位数据位
 		stdout-path = "serial2:1500000n8";
 	};
 
+	// FIQ 调试器（快速中断调试，用于串口调试和系统故障排查）
 	fiq-debugger {
-		compatible = "rockchip,fiq-debugger";
-		rockchip,serial-id = <2>;
-		rockchip,wake-irq = <0>;
+		compatible = "rockchip,fiq-debugger";  // 兼容 Rockchip FIQ 调试器驱动
+		rockchip,serial-id = <2>;              // 使用串口2（对应 UART2）
+		rockchip,wake-irq = <0>;               // 唤醒中断号（0 表示禁用唤醒）
 		/* If enable uart uses irq instead of fiq */
-		rockchip,irq-mode-enable = <1>;
-		rockchip,baudrate = <1500000>;  /* Only 115200 and 1500000 */
-		interrupts = <GIC_SPI 252 IRQ_TYPE_LEVEL_LOW>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&uart2m0_xfer>;
-		status = "okay";
+		rockchip,irq-mode-enable = <1>;        // 启用 IRQ 模式（而非 FIQ 模式）
+		rockchip,baudrate = <1500000>;         // 串口波特率（仅支持 115200 和 1500000）
+		interrupts = <GIC_SPI 252 IRQ_TYPE_LEVEL_LOW>;  // 中断配置：GIC SPI 252，低电平触发
+		pinctrl-names = "default";             // 引脚配置名称（默认配置）
+		pinctrl-0 = <&uart2m0_xfer>;           // 引用 UART2 传输引脚配置
+		status = "okay";                       // 启用该设备
 	};
 
+	// 调试寄存器（映射 Rockchip 调试寄存器空间，用于硬件调试）
 	debug: debug@fd904000 {
-		compatible = "rockchip,debug";
+		compatible = "rockchip,debug";         // 兼容 Rockchip 调试驱动
+		// 寄存器地址范围（4 个连续的 0x1000 空间）
 		reg = <0x0 0xfd904000 0x0 0x1000>,
 			<0x0 0xfd905000 0x0 0x1000>,
 			<0x0 0xfd906000 0x0 0x1000>,
 			<0x0 0xfd907000 0x0 0x1000>;
 	};
 
+	// 12V 直流输入电源（系统主输入电源，固定电压稳压源）
 	dc_12v: dc-12v {
-		compatible = "regulator-fixed";
-		regulator-name = "dc_12v";
-		regulator-always-on;
-		regulator-boot-on;
-		regulator-min-microvolt = <12000000>;
-		regulator-max-microvolt = <12000000>;
+		compatible = "regulator-fixed";        // 兼容固定电压稳压源驱动
+		regulator-name = "dc_12v";             // 稳压源名称（用于内核识别和日志输出）
+		regulator-always-on;                   // 始终保持开启状态
+		regulator-boot-on;                     // 系统启动时开启
+		regulator-min-microvolt = <12000000>;  // 最小输出电压（12V，单位：微伏）
+		regulator-max-microvolt = <12000000>;  // 最大输出电压（12V，固定电压）
 	};
 
+	// 3.3V 系统电源（由 12V 输入转换而来，供系统大部分外设使用）
 	vcc3v3_sys: vcc3v3-sys {
 		compatible = "regulator-fixed";
 		regulator-name = "vcc3v3_sys";
 		regulator-always-on;
 		regulator-boot-on;
-		regulator-min-microvolt = <3300000>;
+		regulator-min-microvolt = <3300000>;   // 3.3V 输出
 		regulator-max-microvolt = <3300000>;
-		vin-supply = <&dc_12v>;
+		vin-supply = <&dc_12v>;                // 输入电源依赖 12V 直流输入
 	};
 
+	// 5V 系统电源（由 12V 输入转换而来，供 USB、存储等外设使用）
 	vcc5v0_sys: vcc5v0-sys {
 		compatible = "regulator-fixed";
 		regulator-name = "vcc5v0_sys";
 		regulator-always-on;
 		regulator-boot-on;
-		regulator-min-microvolt = <5000000>;
+		regulator-min-microvolt = <5000000>;   // 5V 输出
 		regulator-max-microvolt = <5000000>;
-		vin-supply = <&dc_12v>;
+		vin-supply = <&dc_12v>;                // 输入电源依赖 12V 直流输入
 	};
 
+	// 5V USB 电源（供 USB 外设总电源，由 12V 输入转换）
 	vcc5v0_usb: vcc5v0-usb {
 		compatible = "regulator-fixed";
 		regulator-name = "vcc5v0_usb";
 		regulator-always-on;
 		regulator-boot-on;
-		regulator-min-microvolt = <5000000>;
+		regulator-min-microvolt = <5000000>;   // 5V 输出
 		regulator-max-microvolt = <5000000>;
-		vin-supply = <&dc_12v>;
+		vin-supply = <&dc_12v>;                // 输入电源依赖 12V 直流输入
 	};
 
+	// 5V USB 主机端口电源（带 GPIO 使能，供 USB 主机端口外设）
 	vcc5v0_host: vcc5v0-host-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "vcc5v0_host";
 		regulator-boot-on;
 		regulator-always-on;
-		regulator-min-microvolt = <5000000>;
+		regulator-min-microvolt = <5000000>;   // 5V 输出
 		regulator-max-microvolt = <5000000>;
-		enable-active-high;
-		gpio = <&gpio0 RK_PA6 GPIO_ACTIVE_HIGH>;
-		vin-supply = <&vcc5v0_usb>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&vcc5v0_host_en>;
+		enable-active-high;                    // 高电平使能该稳压源
+		gpio = <&gpio0 RK_PA6 GPIO_ACTIVE_HIGH>; // 使能 GPIO：GPIO0 PA6，高电平有效
+		vin-supply = <&vcc5v0_usb>;            // 输入电源依赖 5V USB 电源
+		pinctrl-names = "default";             // 引脚配置名称（默认）
+		pinctrl-0 = <&vcc5v0_host_en>;         // 引用 USB 主机电源使能引脚配置
 	};
 
+	// 5V USB OTG 端口电源（带 GPIO 使能，支持 USB OTG 模式）
 	vcc5v0_otg: vcc5v0-otg-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "vcc5v0_otg";
-		regulator-min-microvolt = <5000000>;
+		regulator-min-microvolt = <5000000>;   // 5V 输出
 		regulator-max-microvolt = <5000000>;
-		enable-active-high;
+		enable-active-high;                    // 高电平使能
 		regulator-boot-on;
 		regulator-always-on;
-		gpio = <&gpio0 RK_PA5 GPIO_ACTIVE_HIGH>;
-		vin-supply = <&vcc5v0_usb>;
+		gpio = <&gpio0 RK_PA5 GPIO_ACTIVE_HIGH>; // 使能 GPIO：GPIO0 PA5，高电平有效
+		vin-supply = <&vcc5v0_usb>;            // 输入电源依赖 5V USB 电源
 		pinctrl-names = "default";
-		pinctrl-0 = <&vcc5v0_otg_en>;
+		pinctrl-0 = <&vcc5v0_otg_en>;          // 引用 USB OTG 电源使能引脚配置
 	};
 
+	// 3.3V LCD0 电源（带 GPIO 使能，供第 0 路 LCD 显示屏使用）
 	vcc3v3_lcd0_n: vcc3v3-lcd0-n {
 		compatible = "regulator-fixed";
 		regulator-name = "vcc3v3_lcd0_n";
-		regulator-boot-on;
-		gpio = <&gpio0 RK_PC7 GPIO_ACTIVE_HIGH>;
-		enable-active-high;
-		pinctrl-0 = <&vcc3v3_lcd0_n_en>;
+		regulator-boot-on;                     // 启动时开启
+		gpio = <&gpio0 RK_PC7 GPIO_ACTIVE_HIGH>; // 使能 GPIO：GPIO0 PC7，高电平有效
+		enable-active-high;                    // 高电平使能
+		pinctrl-0 = <&vcc3v3_lcd0_n_en>;       // 引用 LCD0 电源使能引脚配置
 		pinctrl-names = "default";
+		// 休眠状态配置（系统休眠时关闭该电源）
 		regulator-state-mem {
 			regulator-off-in-suspend;
 		};
-
 	};
 
+	// 3.3V LCD1 电源（带 GPIO 使能，供第 1 路 LCD 显示屏使用）
 	vcc3v3_lcd1_n: vcc3v3-lcd1-n {
 		compatible = "regulator-fixed";
 		regulator-name = "vcc3v3_lcd1_n";
 		regulator-boot-on;
-		gpio = <&gpio0 RK_PC5 GPIO_ACTIVE_HIGH>;
+		gpio = <&gpio0 RK_PC5 GPIO_ACTIVE_HIGH>; // 使能 GPIO：GPIO0 PC5，高电平有效
 		enable-active-high;
-		pinctrl-0 = <&vcc3v3_lcd1_n_en>;
+		pinctrl-0 = <&vcc3v3_lcd1_n_en>;       // 引用 LCD1 电源使能引脚配置
 		pinctrl-names = "default";
+		// 休眠状态配置（系统休眠时关闭该电源）
 		regulator-state-mem {
 			regulator-off-in-suspend;
 		};
-
 	};
 
+	// SDIO 电源序列控制器（用于 WiFi/蓝牙等 SDIO 外设的电源时序控制）
 	sdio_pwrseq: sdio-pwrseq {
-		compatible = "mmc-pwrseq-simple";
-		clocks = <&rk809 1>;
-		clock-names = "ext_clock";
+		compatible = "mmc-pwrseq-simple";      // 兼容简易 MMC 电源序列驱动
+		clocks = <&rk809 1>;                   // 外部时钟：RK809 PMIC 时钟 1
+		clock-names = "ext_clock";             // 时钟名称（外部时钟）
 		pinctrl-names = "default";
-		pinctrl-0 = <&wifi_enable_h>;
-		post-power-on-delay-ms = <200>;
-		reset-gpios = <&gpio3 RK_PD5 GPIO_ACTIVE_LOW>;
+		pinctrl-0 = <&wifi_enable_h>;          // 引用 WiFi 使能引脚配置
+		post-power-on-delay-ms = <200>;        // 电源开启后延时 200ms（保证外设稳定启动）
+		reset-gpios = <&gpio3 RK_PD5 GPIO_ACTIVE_LOW>; // 复位 GPIO：GPIO3 PD5，低电平有效
 	};
 
+	// 1.8V ADC 电源（供 SARADC 模数转换器使用，固定电压）
 	vcc1v8_adc: vcc1v8-adc {
 		compatible = "regulator-fixed";
 		regulator-name = "vcc1v8_adc";
 		regulator-always-on;
 		regulator-boot-on;
-		regulator-min-microvolt = <1800000>;
+		regulator-min-microvolt = <1800000>;   // 1.8V 输出
 		regulator-max-microvolt = <1800000>;
-		vin-supply = <&vcc3v3_sys>;
+		vin-supply = <&vcc3v3_sys>;            // 输入电源依赖 3.3V 系统电源
 	};
 
+	// 2.5V DDR 电源（供 DDR 内存使用，固定电压）
 	vcc2v5_ddr: vcc2v5-ddr {
 		compatible = "regulator-fixed";
 		regulator-name = "vcc2v5-sys";
 		regulator-always-on;
 		regulator-boot-on;
-		regulator-min-microvolt = <2500000>;
+		regulator-min-microvolt = <2500000>;   // 2.5V 输出
 		regulator-max-microvolt = <2500000>;
-		vin-supply = <&vcc3v3_sys>;
+		vin-supply = <&vcc3v3_sys>;            // 输入电源依赖 3.3V 系统电源
 	};
 
+	// 3.3V VGA 电源（带 GPIO 使能，供 VGA 显示接口使用）
 	vcc3v3_vga: vcc3v3-vga {
 		compatible = "regulator-fixed";
 		regulator-name = "vcc3v3_vga";
 		regulator-always-on;
 		regulator-boot-on;
-		gpio = <&gpio0 RK_PD5 GPIO_ACTIVE_HIGH>;
-		pinctrl-0 = <&vcc3v3_vga_en>;
+		gpio = <&gpio0 RK_PD5 GPIO_ACTIVE_HIGH>; // 使能 GPIO：GPIO0 PD5，高电平有效
+		pinctrl-0 = <&vcc3v3_vga_en>;          // 引用 VGA 电源使能引脚配置
 		pinctrl-names = "default";
-		enable-active-high;
-		vin-supply = <&vcc3v3_sys>;
+		enable-active-high;                    // 高电平使能
+		vin-supply = <&vcc3v3_sys>;            // 输入电源依赖 3.3V 系统电源
 	};
 
+	// 0.9V PCIe 3.0 模拟电源（供 PCIe 3.0 控制器模拟电路使用）
 	pcie30_avdd0v9: pcie30-avdd0v9 {
 		compatible = "regulator-fixed";
 		regulator-name = "pcie30_avdd0v9";
 		regulator-always-on;
 		regulator-boot-on;
-		regulator-min-microvolt = <900000>;
+		regulator-min-microvolt = <900000>;    // 0.9V 输出
 		regulator-max-microvolt = <900000>;
-		vin-supply = <&vcc3v3_sys>;
+		vin-supply = <&vcc3v3_sys>;            // 输入电源依赖 3.3V 系统电源
 	};
 
+	// 1.8V PCIe 3.0 模拟电源（供 PCIe 3.0 控制器模拟电路使用）
 	pcie30_avdd1v8: pcie30-avdd1v8 {
 		compatible = "regulator-fixed";
 		regulator-name = "pcie30_avdd1v8";
 		regulator-always-on;
 		regulator-boot-on;
-		regulator-min-microvolt = <1800000>;
+		regulator-min-microvolt = <1800000>;   // 1.8V 输出
 		regulator-max-microvolt = <1800000>;
-		vin-supply = <&vcc3v3_sys>;
+		vin-supply = <&vcc3v3_sys>;            // 输入电源依赖 3.3V 系统电源
 	};
 
+	// 3.3V PCIe 电源（带 GPIO 使能，供 PCIe 外设使用，带启动延时）
 	vcc3v3_pcie: vcc3v3-pcie {
 		compatible = "regulator-fixed";
 		regulator-name = "vcc3v3_pcie";
 		regulator-always-on;
 		regulator-boot-on;
-		regulator-min-microvolt = <3300000>;
+		regulator-min-microvolt = <3300000>;   // 3.3V 输出
 		regulator-max-microvolt = <3300000>;
-		enable-active-high;
-		gpio = <&gpio0 RK_PD4 GPIO_ACTIVE_HIGH>;
-		pinctrl-0 = <&vcc3v3_pcie_en>;
+		enable-active-high;                    // 高电平使能
+		gpio = <&gpio0 RK_PD4 GPIO_ACTIVE_HIGH>; // 使能 GPIO：GPIO0 PD4，高电平有效
+		pinctrl-0 = <&vcc3v3_pcie_en>;         // 引用 PCIe 电源使能引脚配置
 		pinctrl-names = "default";
-		startup-delay-us = <5000>;
-		vin-supply = <&vcc3v3_sys>;
+		startup-delay-us = <5000>;             // 电源开启后延时 5000 微秒（5ms）
+		vin-supply = <&vcc3v3_sys>;            // 输入电源依赖 3.3V 系统电源
 	};
 
+	// 3.3V 备用电源（供系统休眠/断电时的备用电路使用，节点名称存在笔误，不影响功能）
 	vcc3v3_bu: c3v3_buvcc3v3-bu {
 		compatible = "regulator-fixed";
 		regulator-name = "vcc3v3_bu";
 		regulator-always-on;
 		regulator-boot-on;
-		regulator-min-microvolt = <3300000>;
+		regulator-min-microvolt = <3300000>;   // 3.3V 输出
 		regulator-max-microvolt = <3300000>;
-		vin-supply = <&vcc5v0_sys>;
+		vin-supply = <&vcc5v0_sys>;            // 输入电源依赖 5V 系统电源
 	};
 
+	// 摄像头电源（带 GPIO 使能，供摄像头模块使用）
 	vcc_camera: vcc-camera-regulator {
 		compatible = "regulator-fixed";
-		gpio = <&gpio0 RK_PC1 GPIO_ACTIVE_HIGH>;
+		gpio = <&gpio0 RK_PC1 GPIO_ACTIVE_HIGH>; // 使能 GPIO：GPIO0 PC1，高电平有效
 		pinctrl-names = "default";
-		pinctrl-0 = <&camera_pwr>;
+		pinctrl-0 = <&camera_pwr>;             // 引用摄像头电源使能引脚配置
 		regulator-name = "vcc_camera";
-		enable-active-high;
+		enable-active-high;                    // 高电平使能
 		regulator-always-on;
 		regulator-boot-on;
 	};
 
+	// CPU 核心可调电源（通过 PWM 控制电压，实现 CPU 动态调压节能）
 	vdd_cpu: vdd-cpu {
-		compatible = "pwm-regulator";
-		rockchip,pwm_id = <0>;
-		rockchip,pwm_voltage = <900000>;
-		pwms = <&pwm0 0 25000 1>;
-		regulator-name = "vdd_cpu";
-		regulator-min-microvolt = <800000>;
-		regulator-max-microvolt = <1400000>;
-		regulator-init-microvolt = <1150000>;
-		regulator-enable-ramp-delay = <300>;
-		regulator-ramp-delay = <8000>;
-		regulator-always-on;
-		regulator-boot-on;
+		compatible = "pwm-regulator";          // 兼容 PWM 可调稳压源驱动
+		rockchip,pwm_id = <0>;                 // 使用 PWM0 控制器
+		rockchip,pwm_voltage = <900000>;       // PWM 基准电压 0.9V
+		pwms = <&pwm0 0 25000 1>;              // PWM 配置：PWM0，通道 0，周期 25000ns，高电平有效
+		regulator-name = "vdd_cpu";            // 稳压源名称（CPU 核心电源）
+		regulator-min-microvolt = <800000>;    // 最小输出电压 0.8V
+		regulator-max-microvolt = <1400000>;   // 最大输出电压 1.4V
+		regulator-init-microvolt = <1150000>;  // 初始输出电压 1.15V
+		regulator-enable-ramp-delay = <300>;   // 使能时电压斜坡延时 300us
+		regulator-ramp-delay = <8000>;         // 电压调整时斜坡延时 8000us
+		regulator-always-on;                   // 始终开启（CPU 核心不可断电）
+		regulator-boot-on;                     // 启动时开启
 	};
 
+	// XPCS 系统控制器（PCIe 扩展配置空间，当前禁用）
 	xpcs: syscon@fda00000 {
-		compatible = "rockchip,rk3568-xpcs", "syscon";
-		reg = <0x0 0xfda00000 0x0 0x200000>;
-		status = "disabled";
+		compatible = "rockchip,rk3568-xpcs", "syscon"; // 兼容 Rockchip XPCS 和系统控制器
+		reg = <0x0 0xfda00000 0x0 0x200000>;   // 寄存器地址范围 0x200000
+		status = "disabled";                   // 禁用该设备
 	};
 
+	// GMAC0 XPCS 固定时钟（125MHz，供 GMAC0 以太网控制器使用）
 	gmac0_xpcsclk: xpcs-gmac0-clock {
-		compatible = "fixed-clock";
-		clock-frequency = <125000000>;
-		clock-output-names = "clk_gmac0_xpcs_mii";
-		#clock-cells = <0>;
+		compatible = "fixed-clock";            // 兼容固定时钟驱动
+		clock-frequency = <125000000>;         // 时钟频率 125MHz
+		clock-output-names = "clk_gmac0_xpcs_mii"; // 时钟输出名称
+		#clock-cells = <0>;                    // 时钟单元格数（0 表示无额外参数）
 	};
 
+	// GMAC1 XPCS 固定时钟（125MHz，供 GMAC1 以太网控制器使用）
 	gmac1_xpcsclk: xpcs-gmac1-clock {
 		compatible = "fixed-clock";
-		clock-frequency = <125000000>;
-		clock-output-names = "clk_gmac1_xpcs_mii";
+		clock-frequency = <125000000>;         // 时钟频率 125MHz
+		clock-output-names = "clk_gmac1_xpcs_mii"; // 时钟输出名称
 		#clock-cells = <0>;
 	};
 
+	// ADC 按键（通过 SARADC 检测模拟电压值，识别按键操作，此处为 F12 恢复按键）
 	adc_keys: adc-keys {
-		compatible = "adc-keys";
-		io-channels = <&saradc 0>;
-		io-channel-names = "buttons";
-		keyup-threshold-microvolt = <1800000>;
-		poll-interval = <100>;
-		status = "okay";
+		compatible = "adc-keys";               // 兼容 ADC 按键驱动
+		io-channels = <&saradc 0>;             // 使用 SARADC 通道 0
+		io-channel-names = "buttons";          // 通道名称（按键）
+		keyup-threshold-microvolt = <1800000>; // 按键释放阈值 1.8V
+		poll-interval = <100>;                 // 轮询间隔 100ms（检测按键状态）
+		status = "okay";                       // 启用该设备
+		// 恢复按键（F12）配置
 		recovery-key {
-			label = "F12";
-			linux,code = <KEY_F12>;
-			press-threshold-microvolt = <1750>;
+			label = "F12";                      // 按键标签
+			linux,code = <KEY_F12>;             // 内核按键编码（F12）
+			press-threshold-microvolt = <1750>; // 按键按压阈值 1750uv（约 1.75mV，对应按键按下）
 		};
 	};
 
+	// LED 控制器（GPIO 控制的 LED，此处为电源指示灯）
 	leds {
-		compatible = "gpio-leds";
+		compatible = "gpio-leds";              // 兼容 GPIO 控制 LED 驱动
+		// 电源 LED 配置
 		led-power {
-			label = "led-power";
-			default-state = "on";
-			gpios = <&gpio0 RK_PC4 GPIO_ACTIVE_HIGH>;
+			label = "led-power";                // LED 标签（电源灯）
+			default-state = "on";               // 默认状态（开启）
+			gpios = <&gpio0 RK_PC4 GPIO_ACTIVE_HIGH>; // 控制 GPIO：GPIO0 PC4，高电平点亮
 			pinctrl-names = "default";
-			pinctrl-0 = <&led_power_en>;
+			pinctrl-0 = <&led_power_en>;        // 引用 LED 电源使能引脚配置
 		};
 	};
 
+	// Realtek RTL8367S 以太网交换芯片（路由器核心交换模块，实现多网口交换）
 	rtlgsw@0 {
-		compatible = "realtek,rtl8367s";
-		realtek,mdio = <&mdio0>;
-		mii-bus = <&mdio0>;
-		realtek,id = <29>;
-		phy-id = <29>;
-		cpu_port = <7>;
+		compatible = "realtek,rtl8367s";       // 兼容 Realtek RTL8367S 驱动
+		realtek,mdio = <&mdio0>;               // 关联 MDIO0 管理总线
+		mii-bus = <&mdio0>;                    // 关联 MII 总线（网络接口总线）
+		realtek,id = <29>;                     // 交换芯片 ID 29
+		phy-id = <29>;                         // PHY 芯片 ID 29
+		cpu_port = <7>;                        // CPU 连接端口 7（与 GMAC0 通信）
 
-		//txdelay, rxdelay, mode, ability.force_mode, ability.txpause, ability.rxpause, ability.link, ability.duplex, speed
+		// txdelay, rxdelay, mode, ability.force_mode, ability.txpause, ability.rxpause, ability.link, ability.duplex, speed
 		//sgmii,
-		realtek,extif1 = <0 0 11 1 1 1 1 1 2>;
+		realtek,extif1 = <0 0 11 1 1 1 1 1 2>; // 扩展接口 1 配置（SGMII 模式，1000M 全双工）
 		//rgmii
-		realtek,extif2 = <0 0 1 1 1 1 1 1 2>;
-		status = "okay";
+		realtek,extif2 = <0 0 1 1 1 1 1 1 2>; // 扩展接口 2 配置（RGMII 模式，1000M 全双工）
+		status = "okay";                       // 启用该交换芯片
 	};
 };
 
+// 对 I2C0 控制器进行覆写配置（I2C0 用于连接 RK809 PMIC 芯片）
 &i2c0 {
+	status = "okay";                       // 启用 I2C0 控制器
 
-	status = "okay";
-
+	// RK809 PMIC 电源管理芯片（负责系统多通道稳压、时钟、电源按键等）
 	rk809: pmic@20 {
-		compatible = "rockchip,rk809";
-		reg = <0x20>;
-		interrupt-parent = <&gpio0>;
-		interrupts = <RK_PA3 IRQ_TYPE_LEVEL_LOW>;
+		compatible = "rockchip,rk809";       // 兼容 Rockchip RK809 驱动
+		reg = <0x20>;                        // I2C 设备地址 0x20
+		interrupt-parent = <&gpio0>;         // 中断父控制器：GPIO0
+		interrupts = <RK_PA3 IRQ_TYPE_LEVEL_LOW>; // 中断 GPIO：GPIO0 PA3，低电平触发
+		// 引脚配置名称（默认、休眠、断电、复位）
 		pinctrl-names = "default", "pmic-sleep", "pmic-power-off", "pmic-reset";
-		pinctrl-0 = <&pmic_int>;
-		pinctrl-1 = <&soc_slppin_slp &rk817_slppin_slp>;
-		pinctrl-2 = <&soc_slppin_gpio &rk817_slppin_pwrdn>;
-		pinctrl-3 = <&soc_slppin_gpio &rk817_slppin_rst>;
-		rockchip,system-power-controller;
-		wakeup-source;
-		#clock-cells = <1>;
-		clock-output-names = "rk808-clkout1\0rk808-clkout2";
-		pmic-reset-func = <0>;
-		not-save-power-en = <1>;
+		pinctrl-0 = <&pmic_int>;             // 默认引脚配置（PMIC 中断）
+		pinctrl-1 = <&soc_slppin_slp &rk817_slppin_slp>; // 休眠状态引脚配置
+		pinctrl-2 = <&soc_slppin_gpio &rk817_slppin_pwrdn>; // 断电状态引脚配置
+		pinctrl-3 = <&soc_slppin_gpio &rk817_slppin_rst>; // 复位状态引脚配置
+		rockchip,system-power-controller;    // 作为系统电源控制器（负责开关机、休眠）
+		wakeup-source;                       // 作为唤醒源（电源按键唤醒系统）
+		#clock-cells = <1>;                  // 时钟单元格数（1 表示需要时钟索引）
+		clock-output-names = "rk808-clkout1\0rk808-clkout2"; // 时钟输出名称
+		pmic-reset-func = <0>;               // 复位功能配置（0 表示默认复位）
+		not-save-power-en = <1>;             // 禁用省电模式
+		// 各稳压通道输入电源依赖（均为 3.3V 系统电源）
 		vcc1-supply = <&vcc3v3_sys>;
 		vcc2-supply = <&vcc3v3_sys>;
 		vcc3-supply = <&vcc3v3_sys>;
@@ -348,231 +388,254 @@
 		vcc8-supply = <&vcc3v3_sys>;
 		vcc9-supply = <&vcc3v3_sys>;
 
+		// 电源按键（由 RK809 管理，用于开关机）
 		pwrkey {
-			status = "okay";
+			status = "okay";                   // 启用电源按键
 		};
 
+		// RK809 引脚控制器（管理 PMIC 自身 GPIO 引脚）
 		pinctrl_rk8xx: pinctrl_rk8xx {
-			gpio-controller;
-			#gpio-cells = <2>;
+			gpio-controller;                   // 声明为 GPIO 控制器
+			#gpio-cells = <2>;                 // GPIO 单元格数（2：引脚号 + 标志）
 
+			// GPIO 休眠引脚空配置
 			rk817_slppin_null: rk817_slppin_null {
-				pins = "gpio_slp";
-				function = "pin_fun0";
+				pins = "gpio_slp";              // 引脚：休眠 GPIO
+				function = "pin_fun0";          // 功能：默认功能 0
 			};
 
+			// GPIO 休眠引脚休眠配置
 			rk817_slppin_slp: rk817_slppin_slp {
 				pins = "gpio_slp";
-				function = "pin_fun1";
+				function = "pin_fun1";          // 功能：休眠功能 1
 			};
 
+			// GPIO 休眠引脚断电配置
 			rk817_slppin_pwrdn: rk817_slppin_pwrdn {
 				pins = "gpio_slp";
-				function = "pin_fun2";
+				function = "pin_fun2";          // 功能：断电功能 2
 			};
 
+			// GPIO 休眠引脚复位配置
 			rk817_slppin_rst: rk817_slppin_rst {
 				pins = "gpio_slp";
-				function = "pin_fun3";
+				function = "pin_fun3";          // 功能：复位功能 3
 			};
 		};
 
+		// RK809 稳压通道配置（包含 DCDC、LDO、SWITCH 三种稳压类型）
 		regulators {
 
+			// DCDC_REG1：逻辑核心电源（供 CPU 周边逻辑电路）
 			vdd_logic: DCDC_REG1 {
 				regulator-always-on;
 				regulator-boot-on;
-				regulator-min-microvolt = <500000>;
-				regulator-max-microvolt = <1350000>;
-				regulator-init-microvolt = <900000>;
-				regulator-ramp-delay = <6001>;
-				regulator-initial-mode = <2>;
+				regulator-min-microvolt = <500000>;    // 最小 0.5V
+				regulator-max-microvolt = <1350000>;   // 最大 1.35V
+				regulator-init-microvolt = <900000>;   // 初始 0.9V
+				regulator-ramp-delay = <6001>;         // 电压斜坡延时 6001us
+				regulator-initial-mode = <2>;          // 初始工作模式 2（DCDC 高效模式）
 				regulator-name = "vdd_logic";
-
+				// 休眠状态：关闭电源
 				regulator-state-mem {
 					regulator-off-in-suspend;
 				};
 			};
 
+			// DCDC_REG2：GPU 核心电源（供 Mali GPU 核心）
 			vdd_gpu: DCDC_REG2 {
 				regulator-always-on;
 				regulator-boot-on;
-				regulator-min-microvolt = <500000>;
-				regulator-max-microvolt = <1350000>;
-				regulator-init-microvolt = <1000000>;
+				regulator-min-microvolt = <500000>;    // 最小 0.5V
+				regulator-max-microvolt = <1350000>;   // 最大 1.35V
+				regulator-init-microvolt = <1000000>;  // 初始 1.0V
 				regulator-ramp-delay = <6001>;
 				regulator-initial-mode = <2>;
 				regulator-name = "vdd_gpu";
-
+				// 休眠状态：关闭电源
 				regulator-state-mem {
 					regulator-off-in-suspend;
 				};
 			};
 
+			// DCDC_REG3：DDR 内存电源（供 DDR 内存核心）
 			vcc_ddr: DCDC_REG3 {
 				regulator-always-on;
 				regulator-boot-on;
 				regulator-initial-mode = <2>;
 				regulator-name = "vcc_ddr";
-
+				// 休眠状态：保持开启（DDR 休眠时需保留数据）
 				regulator-state-mem {
 					regulator-on-in-suspend;
 				};
 			};
 
+			// DCDC_REG4：NPU 核心电源（供神经网络处理单元核心）
 			vdd_npu: DCDC_REG4 {
 				regulator-always-on;
 				regulator-boot-on;
-				regulator-min-microvolt = <500000>;
-				regulator-max-microvolt = <1350000>;
-				regulator-init-microvolt = <1000000>;
+				regulator-min-microvolt = <500000>;    // 最小 0.5V
+				regulator-max-microvolt = <1350000>;   // 最大 1.35V
+				regulator-init-microvolt = <1000000>;  // 初始 1.0V
 				regulator-ramp-delay = <6001>;
 				regulator-initial-mode = <2>;
 				regulator-name = "vdd_npu";
-
+				// 休眠状态：关闭电源
 				regulator-state-mem {
 					regulator-off-in-suspend;
 				};
 			};
 
+			// LDO_REG1：0.9V 图像模拟电源（供图像处理模块模拟电路）
 			vdda0v9_image: LDO_REG1 {
 				regulator-boot-on;
 				regulator-always-on;
-				regulator-min-microvolt = <900000>;
+				regulator-min-microvolt = <900000>;    // 固定 0.9V
 				regulator-max-microvolt = <900000>;
 				regulator-name = "vdda0v9_image";
-
+				// 休眠状态：关闭电源
 				regulator-state-mem {
 					regulator-off-in-suspend;
 				};
 			};
 
+			// LDO_REG2：0.9V 模拟电源（供系统通用模拟电路）
 			vdda_0v9: LDO_REG2 {
 				regulator-always-on;
 				regulator-boot-on;
-				regulator-min-microvolt = <900000>;
+				regulator-min-microvolt = <900000>;    // 固定 0.9V
 				regulator-max-microvolt = <900000>;
 				regulator-name = "vdda_0v9";
-
+				// 休眠状态：关闭电源
 				regulator-state-mem {
 					regulator-off-in-suspend;
 				};
 			};
 
+			// LDO_REG3：0.9V PMIC 模拟电源（供 RK809 自身模拟电路）
 			vdda0v9_pmu: LDO_REG3 {
 				regulator-always-on;
 				regulator-boot-on;
-				regulator-min-microvolt = <900000>;
+				regulator-min-microvolt = <900000>;    // 固定 0.9V
 				regulator-max-microvolt = <900000>;
 				regulator-name = "vdda0v9_pmu";
-
+				// 休眠状态：保持开启（PMIC 自身需持续工作）
 				regulator-state-mem {
 					regulator-on-in-suspend;
 					regulator-suspend-microvolt = <900000>;
 				};
 			};
 
+			// LDO_REG4：3.0V 音频编解码电源（供 ACCODEC 音频模块）
 			vccio_acodec: LDO_REG4 {
 				regulator-always-on;
 				regulator-boot-on;
-				regulator-min-microvolt = <3000000>;
+				regulator-min-microvolt = <3000000>;   // 固定 3.0V
 				regulator-max-microvolt = <3000000>;
 				regulator-name = "vccio_acodec";
-
+				// 休眠状态：关闭电源
 				regulator-state-mem {
 					regulator-off-in-suspend;
 				};
 			};
 
+			// LDO_REG5：SD 卡 IO 电源（供 SD/MMC 卡接口 IO，支持 1.8V/3.3V 切换）
 			vccio_sd: LDO_REG5 {
 				regulator-always-on;
 				regulator-boot-on;
-				regulator-min-microvolt = <1800000>;
-				regulator-max-microvolt = <3300000>;
+				regulator-min-microvolt = <1800000>;   // 最小 1.8V
+				regulator-max-microvolt = <3300000>;   // 最大 3.3V
 				regulator-name = "vccio_sd";
-
+				// 休眠状态：关闭电源
 				regulator-state-mem {
 					regulator-off-in-suspend;
 				};
 			};
 
+			// LDO_REG6：3.3V PMIC 电源（供 RK809 自身数字电路）
 			vcc3v3_pmu: LDO_REG6 {
 				regulator-always-on;
 				regulator-boot-on;
-				regulator-min-microvolt = <3300000>;
+				regulator-min-microvolt = <3300000>;   // 固定 3.3V
 				regulator-max-microvolt = <3300000>;
 				regulator-name = "vcc3v3_pmu";
-
+				// 休眠状态：保持开启（PMIC 自身需持续工作）
 				regulator-state-mem {
 					regulator-on-in-suspend;
 					regulator-suspend-microvolt = <3300000>;
 				};
 			};
 
+			// LDO_REG7：1.8V 模拟电源（供系统通用 1.8V 模拟电路）
 			vcca_1v8: LDO_REG7 {
 				regulator-always-on;
 				regulator-boot-on;
-				regulator-min-microvolt = <1800000>;
+				regulator-min-microvolt = <1800000>;   // 固定 1.8V
 				regulator-max-microvolt = <1800000>;
 				regulator-name = "vcca_1v8";
-
+				// 休眠状态：关闭电源
 				regulator-state-mem {
 					regulator-off-in-suspend;
 				};
 			};
 
+			// LDO_REG8：1.8V PMIC 模拟电源（供 RK809 自身 1.8V 模拟电路）
 			vcca1v8_pmu: LDO_REG8 {
 				regulator-always-on;
 				regulator-boot-on;
-				regulator-min-microvolt = <1800000>;
+				regulator-min-microvolt = <1800000>;   // 固定 1.8V
 				regulator-max-microvolt = <1800000>;
 				regulator-name = "vcca1v8_pmu";
-
+				// 休眠状态：保持开启（PMIC 自身需持续工作）
 				regulator-state-mem {
 					regulator-on-in-suspend;
 					regulator-suspend-microvolt = <1800000>;
 				};
 			};
 
+			// LDO_REG9：1.8V 图像模拟电源（供图像处理模块 1.8V 模拟电路）
 			vcca1v8_image: LDO_REG9 {
 				regulator-always-on;
 				regulator-boot-on;
-				regulator-min-microvolt = <1800000>;
+				regulator-min-microvolt = <1800000>;   // 固定 1.8V
 				regulator-max-microvolt = <1800000>;
 				regulator-name = "vcca1v8_image";
-
+				// 休眠状态：关闭电源
 				regulator-state-mem {
 					regulator-off-in-suspend;
 				};
 			};
 
+			// DCDC_REG5：1.8V 系统电源（供系统通用 1.8V 数字电路）
 			vcc_1v8: DCDC_REG5 {
 				regulator-always-on;
 				regulator-boot-on;
-				regulator-min-microvolt = <1800000>;
+				regulator-min-microvolt = <1800000>;   // 固定 1.8V
 				regulator-max-microvolt = <1800000>;
 				regulator-name = "vcc_1v8";
-
+				// 休眠状态：关闭电源
 				regulator-state-mem {
 					regulator-off-in-suspend;
 				};
 			};
 
+			// SWITCH_REG1：3.3V 开关电源（供系统通用 3.3V 外设）
 			vcc_3v3: SWITCH_REG1 {
 				regulator-always-on;
 				regulator-boot-on;
 				regulator-name = "vcc_3v3";
-
+				// 休眠状态：关闭电源
 				regulator-state-mem {
 					regulator-off-in-suspend;
 				};
 			};
 
+			// SWITCH_REG2：3.3V SD 卡电源（供 SD/MMC 卡供电）
 			vcc3v3_sd: SWITCH_REG2 {
 				regulator-always-on;
 				regulator-boot-on;
 				regulator-name = "vcc3v3_sd";
-
+				// 休眠状态：关闭电源
 				regulator-state-mem {
 					regulator-off-in-suspend;
 				};
@@ -581,114 +644,149 @@
 	};
 };
 
+// 对引脚控制器（pinctrl）进行覆写配置（定义各类外设的引脚复用和电气特性）
 &pinctrl {
+	// USB 相关引脚配置
 	usb {
+		// USB 主机端口电源使能引脚
 		vcc5v0_host_en: vcc5v0-host-en {
+			// Rockchip 引脚格式：<bank pin function config>
+			// GPIO0 PA6，GPIO 功能，无上下拉
 			rockchip,pins = <0 RK_PA6 RK_FUNC_GPIO &pcfg_pull_none>;
 		};
 		
+		// USB OTG 端口电源使能引脚
 		vcc5v0_otg_en: vcc5v0-otg-en {
+			// GPIO0 PA5，GPIO 功能，无上下拉
 			rockchip,pins = <0 RK_PA5 RK_FUNC_GPIO &pcfg_pull_none>;
 		};
 	};
 
+	// 稳压源使能相关引脚配置
 	regulator-en {
+		// LCD0 电源使能引脚
 		vcc3v3_lcd0_n_en: vcc3v3-lcd0-n-en {
 			rockchip,pins = <0 RK_PC7 RK_FUNC_GPIO &pcfg_pull_none>;
 		};
+		// LCD1 电源使能引脚
 		vcc3v3_lcd1_n_en: vcc3v3-lcd1-n-en {
 			rockchip,pins = <0 RK_PC5 RK_FUNC_GPIO &pcfg_pull_none>;
 		};
+		// VGA 电源使能引脚
 		vcc3v3_vga_en: vcc3v3-vga-en {
 			rockchip,pins = <0 RK_PD5 RK_FUNC_GPIO &pcfg_pull_none>;
 		};
+		// 摄像头电源使能引脚
 		camera_pwr: camera-pwr {
 			rockchip,pins = <0 RK_PC1 RK_FUNC_GPIO &pcfg_pull_none>;
 		};
+		// PCIe 电源使能引脚
 		vcc3v3_pcie_en: vcc3v3-pcie-en {
 			rockchip,pins = <0 RK_PD4 RK_FUNC_GPIO &pcfg_pull_none>;
 		};
 	};
 
+	// SDIO 电源序列相关引脚配置
 	sdio-pwrseq {
+		// WiFi 使能引脚
 		wifi_enable_h: wifi-enable-h {
 			rockchip,pins = <3 RK_PD5 RK_FUNC_GPIO &pcfg_pull_none>;
 		};
 	};
 
+	// PMIC 相关引脚配置
 	pmic {
-	
+		// PMIC 中断引脚
 		pmic_int: pmic-intl {
-			rockchip,pins = <0 RK_PA3 RK_FUNC_GPIO &pcfg_pull_up>;
+			rockchip,pins = <0 RK_PA3 RK_FUNC_GPIO &pcfg_pull_up>; // 上拉配置
 		};
 	
+		// SOC 休眠 GPIO 引脚
 		soc_slppin_gpio: soc-slppin-gpio {
-			rockchip,pins = <0 RK_PA2 0 &pcfg_output_low>;
+			rockchip,pins = <0 RK_PA2 0 &pcfg_output_low>; // 输出低电平
 		};
 	
+		// SOC 休眠引脚（休眠模式）
 		soc_slppin_slp:soc-slppin-slp {
 			rockchip,pins = <0 RK_PA2 1 &pcfg_pull_none>;
 		};
 	
+		// SOC 休眠引脚（复位模式）
 		soc_slppin_rst {
 			rockchip,pins = <0 RK_PA2 2 &pcfg_pull_none>;
 		};
 	};
 
+	// PCIe 相关引脚配置
 	pcie {
+		// PCIe 3.0 x1 复位引脚
 		pcie30x1_reset_h: pcie30x1-reset-h {
 			rockchip,pins = <0 RK_PC3 RK_FUNC_GPIO &pcfg_pull_none>;
 		};
+		// PCIe 3.0 x2 复位引脚
 		pcie30x2_reset_h: pcie30x2-reset-h {
 			rockchip,pins = <0 RK_PC6 RK_FUNC_GPIO &pcfg_pull_none>;
 		};
+		// PCIe 2.0 x1 复位引脚
 		pcie2x1_reset_h: pcie2x1-reset-h {
 			rockchip,pins = <3 RK_PC1 RK_FUNC_GPIO &pcfg_pull_none>;
 		};
 	};
 
+	// GMAC 以太网复位相关引脚配置
 	gmac-reset {
+		// GMAC0 复位引脚
 		gmac0_reset: gmac0-reset {
 			rockchip,pins = <1 RK_PB0 RK_FUNC_GPIO &pcfg_pull_none>;
 		};
+		// GMAC1 复位引脚
 		gmac1_reset: gmac1-reset {
 			rockchip,pins = <1 RK_PB1 RK_FUNC_GPIO &pcfg_pull_none>;
 		};
 	};
 
+	// LED 相关引脚配置
 	leds {
+		// 电源 LED 使能引脚
 		led_power_en: led-power-en {
 			rockchip,pins = <0 RK_PC4 RK_FUNC_GPIO &pcfg_pull_none>;
 		};
 	};
 };
 
+// CPU0 核心电源配置（关联 CPU 可调电源）
 &cpu0 {
 	cpu-supply = <&vdd_cpu>;
 };
 
+// CPU1 核心电源配置
 &cpu1 {
 	cpu-supply = <&vdd_cpu>;
 };
 
+// CPU2 核心电源配置
 &cpu2 {
 	cpu-supply = <&vdd_cpu>;
 };
 
+// CPU3 核心电源配置
 &cpu3 {
 	cpu-supply = <&vdd_cpu>;
 };
 
+// 温度传感器（TSADC，用于 CPU/GPU 温度检测和过热保护）
 &tsadc {
-	rockchip,hw-tshut-mode = <1>;
-	rockchip,hw-tshut-polarity = <0>;
-	status = "okay";
+	rockchip,hw-tshut-mode = <1>;        // 硬件关机模式 1（过热自动关机）
+	rockchip,hw-tshut-polarity = <0>;    // 过热触发极性 0（低电平触发）
+	status = "okay";                     // 启用温度传感器
 };
 
+// UART2 串口（系统控制台，对应 FIQ 调试器）
 &uart2 {
-	status = "okay";
+	status = "okay";                     // 启用 UART2
 };
 
+// PCIe 3.0 PHY 全局寄存器（无额外配置，保持默认）
 &pcie30_phy_grf {
 };
 
@@ -698,107 +796,121 @@
 // 不然开启就挂死,更换版本:https://github.com/Kwiboo/u-boot-rockchip
 // https://lists.denx.de/pipermail/u-boot/2023-August/525793.html
 // 这个pcie,可能需要打补丁,使用radxa 版本
+// PCIe 3.0 x1 控制器（单通道，用于外接 PCIe 外设）
 &pcie3x1 {
-		vpcie3v3-supply = <&vcc3v3_pcie>;
-		reset-gpios = <&gpio0 RK_PC3 GPIO_ACTIVE_HIGH>;
-		num-lanes = <0x1>; /*可能不生效,但是拆分需要打补丁,如果是吧,打补丁*/
-		pinctrl-0 = <&pcie30x1_reset_h>;
-		status = "okay";
+	vpcie3v3-supply = <&vcc3v3_pcie>;    // 电源依赖 3.3V PCIe 电源
+	reset-gpios = <&gpio0 RK_PC3 GPIO_ACTIVE_HIGH>; // 复位 GPIO：GPIO0 PC3，高电平有效
+	num-lanes = <0x1>;                   // 通道数 1（单通道）
+	pinctrl-0 = <&pcie30x1_reset_h>;     // 引用 PCIe 3.0 x1 复位引脚配置
+	status = "okay";                     // 启用 PCIe 3.0 x1
 };
 
-//fe280000
+// fe280000
+// PCIe 3.0 x2 控制器（单通道，用于外接 PCIe 外设）
 &pcie3x2 {
-		vpcie3v3-supply = <&vcc3v3_pcie>;
-		reset-gpios = <&gpio0 RK_PC6 GPIO_ACTIVE_HIGH>;
-		status = "okay";
-		num-lanes = <0x1>;
-		pinctrl-0 = <&pcie30x2_reset_h>;
+	vpcie3v3-supply = <&vcc3v3_pcie>;    // 电源依赖 3.3V PCIe 电源
+	reset-gpios = <&gpio0 RK_PC6 GPIO_ACTIVE_HIGH>; // 复位 GPIO：GPIO0 PC6，高电平有效
+	status = "okay";                     // 启用 PCIe 3.0 x2
+	num-lanes = <0x1>;                   // 通道数 1（单通道）
+	pinctrl-0 = <&pcie30x2_reset_h>;     // 引用 PCIe 3.0 x2 复位引脚配置
 };
 
+// PCIe 3.0 PHY 控制器（管理 PCIe 3.0 物理层）
 &pcie30phy {
-		data-lanes = <1 2>; //配置lan的通道树
-		status = "okay";
+	data-lanes = <1 2>;                  // 配置数据通道 1、2（对应 pcie3x1、pcie3x2）
+	status = "okay";                     // 启用 PCIe 3.0 PHY
 };
 
+// 组合 PHY 2（用于 PCIe 3.0 物理层转换）
 &combphy2 {
-		status = "okay";
+	status = "okay";                     // 启用组合 PHY 2
 };
 
+// PCIe 2.0 x1 控制器（单通道，用于外接 PCIe 外设，带复位延时）
 &pcie2x1 {
-		reset-gpios = <&gpio3 RK_PC1 GPIO_ACTIVE_HIGH>;
-		pinctrl-0 = <&pcie2x1_reset_h>;
-		//for kernel.dts
-		rockchip,perst-inactive-ms = <500>;
-		status = "okay";
+	reset-gpios = <&gpio3 RK_PC1 GPIO_ACTIVE_HIGH>; // 复位 GPIO：GPIO3 PC1，高电平有效
+	pinctrl-0 = <&pcie2x1_reset_h>;     // 引用 PCIe 2.0 x1 复位引脚配置
+	rockchip,perst-inactive-ms = <500>; // 复位无效延时 500ms（保证外设稳定启动）
+	status = "okay";                     // 启用 PCIe 2.0 x1
 };
 
+// MDIO0 管理总线（用于以太网 PHY/交换芯片管理）
 &mdio0 {
-	status = "okay";
+	status = "okay";                     // 启用 MDIO0
 };
 
+// GMAC0 以太网控制器（主以太网口，连接 RTL8367S 交换芯片）
 &gmac0 {
-	status = "okay";
-	phy-mode = "rgmii";
-	snps,reset-gpio = <&gpio1 RK_PB0 GPIO_ACTIVE_LOW>;
-	snps,reset-active-low;
-	snps,reset-delays-us = <0 20000 100000>;
-	assigned-clocks = <&cru SCLK_GMAC0_RX_TX &cru SCLK_GMAC0>;
-	assigned-clock-parents = <&cru SCLK_GMAC0_RGMII_SPEED>;
-	assigned-clock-rates = <0 125000000>;
-	tx_delay = <0x3f>;
-	rx_delay = <0x2c>;
-	clock_in_out = "output";
+	status = "okay";                     // 启用 GMAC0
+	phy-mode = "rgmii";                  // PHY 接口模式：RGMII（千兆以太网接口）
+	snps,reset-gpio = <&gpio1 RK_PB0 GPIO_ACTIVE_LOW>; // 复位 GPIO：GPIO1 PB0，低电平有效
+	snps,reset-active-low;               // 复位低电平有效
+	snps,reset-delays-us = <0 20000 100000>; // 复位延时：0us 等待，20000us 复位，100000us 恢复
+	assigned-clocks = <&cru SCLK_GMAC0_RX_TX &cru SCLK_GMAC0>; // 关联时钟
+	assigned-clock-parents = <&cru SCLK_GMAC0_RGMII_SPEED>; // 时钟父节点
+	assigned-clock-rates = <0 125000000>; // 时钟频率 125MHz
+	tx_delay = <0x3f>;                   // 发送延时校准 0x3f
+	rx_delay = <0x2c>;                   // 接收延时校准 0x2c
+	clock_in_out = "output";             // 时钟输出模式
 	pinctrl-names = "default";
+	// 引用 GMAC0 相关引脚配置（MIIM、TX/RX 总线、RGMII 时钟/总线）
 	pinctrl-0 = <&gmac0_miim &gmac0_tx_bus2 &gmac0_rx_bus2 &gmac0_rgmii_clk &gmac0_rgmii_bus>;
+	// 固定链路配置（与交换芯片直连，无外部 PHY）
 	fixed-link {
-		speed = <1000>;
-		full-duplex;
+		speed = <1000>;                   // 链路速度 1000M
+		full-duplex;                      // 全双工模式
 	};
 };
 
+// MDIO1 管理总线（用于 GMAC1 以太网 PHY 管理，当前启用但未使用）
 &mdio1 {
-	status = "okay";
+	status = "okay";                     // 启用 MDIO1
 };
 
+// PIPE PHY 全局寄存器 1（用于 GMAC1 物理层配置）
 &pipe_phy_grf1 {
-	status = "okay";
+	status = "okay";                     // 启用 PIPE PHY 全局寄存器 1
 };
 
+// 组合 PHY 1（用于 GMAC1 SGMII 物理层转换）
 &combphy1 {
-	rockchip,sgmii-mac-sel = <1>;
-	status = "okay";
+	rockchip,sgmii-mac-sel = <1>;        // 选择 SGMII MAC 1（对应 GMAC1）
+	status = "okay";                     // 启用组合 PHY 1
 };
 
+// XPCS 控制器（当前禁用，GMAC1 未启用）
 &xpcs {
-	status = "disabled";
+	status = "disabled";                 // 禁用 XPCS 控制器
 };
 
+// GMAC1 以太网控制器（备用以太网口，当前禁用）
 &gmac1 {
-	status = "disabled";
-	phy-mode = "sgmii";
-	rockchip,pipegrf = <&pipegrf>;
-	rockchip,xpcs = <&xpcs>;
-	//snps,reset-gpio = <&gpio2 RK_PC2 GPIO_ACTIVE_LOW>;
-	//snps,reset-active-low;
-	//snps,reset-delays-us = <0 20000 100000>;
-	assigned-clocks = <&cru SCLK_GMAC1_RX_TX>;
-	assigned-clock-parents = <&gmac1_xpcsclk>;
+	status = "disabled";                 // 禁用 GMAC1
+	phy-mode = "sgmii";                  // PHY 接口模式：SGMII（串行千兆以太网接口）
+	rockchip,pipegrf = <&pipegrf>;       // 关联 PIPE PHY 全局寄存器
+	rockchip,xpcs = <&xpcs>;             // 关联 XPCS 控制器
+	assigned-clocks = <&cru SCLK_GMAC1_RX_TX>; // 关联时钟
+	assigned-clock-parents = <&gmac1_xpcsclk>; // 时钟父节点（125MHz 固定时钟）
 	pinctrl-names = "default";
-	pinctrl-0 = <&gmac1m1_miim>;
-	power-domains = <&power RK3568_PD_PIPE>;
-	phys = <&combphy1 PHY_TYPE_SGMII>;
+	pinctrl-0 = <&gmac1m1_miim>;         // 引用 GMAC1 MIIM 引脚配置
+	power-domains = <&power RK3568_PD_PIPE>; // 关联电源域（PIPE 域）
+	phys = <&combphy1 PHY_TYPE_SGMII>;   // 关联物理层（组合 PHY 1，SGMII 类型）
+	// 固定链路配置（预留 1000M 全双工）
 	fixed-link {
 		speed = <1000>;
 		full-duplex;
 	};
 };
 
+// USB 主机 0 EHCI 控制器（USB 2.0 高速主机控制器）
 &usb_host0_ehci {
-	status = "okay";
+	status = "okay";                     // 启用 USB 主机 0 EHCI
 };
 
+// USB 主机 0 OHCI 控制器（USB 1.1 低速主机控制器，带兼容性补丁）
 &usb_host0_ohci {
-	status = "okay";
+	status = "okay";                     // 启用 USB 主机 0 OHCI
+	// 一系列 USB 兼容性补丁（禁用部分高级功能，提升兼容性）
 	snps,dis_enblslpm_quirk;
 	snps,dis-u1-entry-quirk;
 	snps,dis-u2-entry-quirk;
@@ -811,11 +923,12 @@
 	quirk-skip-phy-init;
 };
 
+// USB 主机 0 XHCI 控制器（USB 3.0 超高速主机控制器，强制主机模式）
 &usb_host0_xhci {
-	dr_mode = "host";//自动检测
-	//extcon = <&combphy0>;
-	status = "okay";
-	extcon = <&usb2phy0>; //超过rxda测试
+	dr_mode = "host";                    // 强制 USB 主机模式
+	status = "okay";                     // 启用 USB 主机 0 XHCI
+	extcon = <&usb2phy0>;                // 关联 USB2PHY0 物理层
+	// 一系列 USB 兼容性补丁
 	snps,dis_enblslpm_quirk;
 	snps,dis-u1-entry-quirk;
 	snps,dis-u2-entry-quirk;
@@ -828,16 +941,20 @@
 	quirk-skip-phy-init;
 };
 
+// USB 主机 1 EHCI 控制器（当前禁用）
 &usb_host1_ehci {
-	status = "disabled";
+	status = "disabled";                 // 禁用 USB 主机 1 EHCI
 };
 
+// USB 主机 1 OHCI 控制器（当前禁用）
 &usb_host1_ohci {
-	status = "disabled";
+	status = "disabled";                 // 禁用 USB 主机 1 OHCI
 };
 
+// USB 主机 1 XHCI 控制器（当前禁用，预留主机模式配置）
 &usb_host1_xhci {
-	dr_mode = "host";//自动检测
+	dr_mode = "host";                    // 强制 USB 主机模式
+	// 一系列 USB 兼容性补丁
 	snps,dis_enblslpm_quirk;
 	snps,dis-u2-freeclk-exists-quirk;
 	snps,dis-del-phy-power-chg-quirk;
@@ -845,210 +962,245 @@
 	snps,dis_rxdet_inp3_quirk;
 	snps,xhci-trb-ent-quirk;
 	snps,parkmode-disable-ss-quirk;
-	status = "disabled";
+	status = "disabled";                 // 禁用 USB 主机 1 XHCI
 };
 
+// USB2PHY0 物理层控制器（USB 2.0 物理层，用于 USB 主机 0/OTG）
 &usb2phy0 {
-	status = "okay";
+	status = "okay";                     // 启用 USB2PHY0
 };
 
+// USB2PHY0 主机模式物理层（供 USB 主机 0 使用）
 &usb2phy0_host {
-	phy-supply = <&vcc5v0_host>;
-	status = "okay";
+	phy-supply = <&vcc5v0_host>;         // 电源依赖 5V USB 主机电源
+	status = "okay";                     // 启用 USB2PHY0 主机模式
 };
 
+// USB2PHY0 OTG 模式物理层（供 USB OTG 使用）
 &usb2phy0_otg {
-	phy-supply = <&vcc5v0_otg>;
-	status = "okay";
+	phy-supply = <&vcc5v0_otg>;          // 电源依赖 5V USB OTG 电源
+	status = "okay";                     // 启用 USB2PHY0 OTG 模式
 };
 
+// USB2PHY1 物理层控制器（当前禁用）
 &usb2phy1 {
-	status = "disabled";
+	status = "disabled";                 // 禁用 USB2PHY1
 };
 
+// USB2PHY1 主机模式物理层（当前禁用）
 &usb2phy1_host {
-	phy-supply = <&vcc5v0_host>;
-	status = "disabled";
+	phy-supply = <&vcc5v0_host>;         // 电源依赖 5V USB 主机电源
+	status = "disabled";                 // 禁用 USB2PHY1 主机模式
 };
 
+// USB2PHY1 OTG 模式物理层（当前禁用）
 &usb2phy1_otg {
-	phy-supply = <&vcc5v0_host>;
-	status = "disabled";
+	phy-supply = <&vcc5v0_host>;         // 电源依赖 5V USB 主机电源
+	status = "disabled";                 // 禁用 USB2PHY1 OTG 模式
 };
 
+// SATA2 控制器（串口硬盘控制器，当前禁用）
 &sata2 {
-	status = "disabled";
+	status = "disabled";                 // 禁用 SATA2
 };
 
+// PMU IO 域控制器（管理 PMIC 相关 IO 电压域）
 &pmu_io_domains {
-	status = "okay";
-	pmuio2-supply = <&vcc3v3_pmu>;
-	vccio1-supply = <&vcc_3v3>;
-	vccio3-supply = <&vcc_3v3>;
-	vccio4-supply = <&vcc_3v3>;
-	vccio5-supply = <&vcc_3v3>;
-	vccio6-supply = <&vcc_3v3>;
-	vccio7-supply = <&vcc_3v3>;
+	status = "okay";                     // 启用 PMU IO 域
+	pmuio2-supply = <&vcc3v3_pmu>;       // PMU IO2 电源依赖 3.3V PMIC 电源
+	vccio1-supply = <&vcc_3v3>;          // VCCIO1 电源依赖 3.3V 开关电源
+	vccio3-supply = <&vcc_3v3>;          // VCCIO3 电源依赖 3.3V 开关电源
+	vccio4-supply = <&vcc_3v3>;          // VCCIO4 电源依赖 3.3V 开关电源
+	vccio5-supply = <&vcc_3v3>;          // VCCIO5 电源依赖 3.3V 开关电源
+	vccio6-supply = <&vcc_3v3>;          // VCCIO6 电源依赖 3.3V 开关电源
+	vccio7-supply = <&vcc_3v3>;          // VCCIO7 电源依赖 3.3V 开关电源
 };
 
+// PWM0 控制器（用于 CPU 核心调压，已启用）
 &pwm0 {
-	status = "okay";
+	status = "okay";                     // 启用 PWM0
 };
 
+// PWM1 控制器（预留，已启用）
 &pwm1 {
-	status = "okay";
+	status = "okay";                     // 启用 PWM1
 };
 
+// PWM2 控制器（当前禁用，拼写错误，应为 disabled）
 &pwm2 {
-	status = "disable";
+	status = "disable";                  // 禁用 PWM2
 };
 
+// PWM3 控制器（当前禁用，拼写错误，应为 disabled）
 &pwm3 {
-	status = "disable";
+	status = "disable";                  // 禁用 PWM3
 };
 
+// 电源域控制器（管理系统各模块电源域）
 &power {
-	status = "okay";
+	status = "okay";                     // 启用电源域控制器
 };
 
+// GPU 控制器（Mali GPU，图形处理单元）
 &gpu {
-	mali-supply = <&vdd_gpu>;
-	status = "okay";
+	mali-supply = <&vdd_gpu>;            // 电源依赖 GPU 核心电源
+	status = "okay";                     // 启用 GPU
 };
 
+// VPU 控制器（视频处理单元，用于视频解码）
 &vpu {
-	status = "okay";
+	status = "okay";                     // 启用 VPU
 };
 
+// RGA 控制器（图形加速单元，用于 2D 图形处理）
 &rga {
-	status = "okay";
+	status = "okay";                     // 启用 RGA
 };
 
+// VEPU 控制器（视频编码单元，用于视频编码）
 &vepu {
-	status = "okay";
+	status = "okay";                     // 启用 VEPU
 };
 
+// VOP 控制器（视频输出处理器，用于显示输出）
 &vop {
-	status = "okay";
+	status = "okay";                     // 启用 VOP
 };
 
-//sdhci@fe310000
+// sdhci 控制器（eMMC 控制器，地址 fe310000）
 &sdhci {
-	max-frequency = <200000000>;
-	bus-width = <8>;
-	no-sdio;
-	no-sd;
-	supports-emmc;
-	non-removable;
-	mmc-hs200-1_8v;
+	max-frequency = <200000000>;         // 最大时钟频率 200MHz
+	bus-width = <8>;                     // 总线宽度 8 位（eMMC 标准）
+	no-sdio;                             // 禁用 SDIO 模式
+	no-sd;                               // 禁用 SD 卡模式
+	supports-emmc;                       // 支持 eMMC 设备
+	non-removable;                       // 不可移除（eMMC 焊接在板上）
+	mmc-hs200-1_8v;                      // 支持 HS200 模式，1.8V 供电
 	pinctrl-names = "default";
+	// 引用 eMMC 相关引脚配置（8 位总线、时钟、命令、数据选通）
 	pinctrl-0 = <&emmc_bus8 &emmc_clk &emmc_cmd &emmc_datastrobe>;
-	status = "okay";
+	status = "okay";                     // 启用 eMMC 控制器
 };
 
-//dwmmc@fe000000
+// sdmmc2 控制器（SDIO 控制器，地址 fe000000，当前禁用）
 &sdmmc2 {
-	max-frequency = <150000000>;
-	fifo-depth = <256>;
-	no-sd;
-	no-mmc;
-	bus-width = <4>;
-	disable-wp;
-	cap-sd-highspeed;
-	cap-sdio-irq;
-	keep-power-in-suspend;
-	sd-uhs-sdr104;
-	mmc-pwrseq = <&sdio_pwrseq>;
-	non-removable;
+	max-frequency = <150000000>;         // 最大时钟频率 150MHz
+	fifo-depth = <256>;                  // FIFO 深度 256 字节
+	no-sd;                               // 禁用 SD 卡模式
+	no-mmc;                              // 禁用 MMC 模式
+	bus-width = <4>;                     // 总线宽度 4 位
+	disable-wp;                          // 禁用写保护
+	cap-sd-highspeed;                    // 支持 SD 高速模式
+	cap-sdio-irq;                        // 支持 SDIO 中断
+	keep-power-in-suspend;               // 休眠时保持电源
+	sd-uhs-sdr104;                       // 支持 UHS SDR104 模式
+	mmc-pwrseq = <&sdio_pwrseq>;         // 关联 SDIO 电源序列控制器
+	non-removable;                       // 不可移除（WiFi/蓝牙模块）
 	pinctrl-names = "default";
+	// 引用 SDMMC2 相关引脚配置（4 位总线、命令、时钟）
 	pinctrl-0 = <&sdmmc2m0_bus4 &sdmmc2m0_cmd &sdmmc2m0_clk>;
-	status = "disabled";
+	status = "disabled";                 // 禁用 SDMMC2
 };
 
-//dwmmc@fe2b0000
+// sdmmc0 控制器（SD/MMC 控制器，地址 fe2b0000，当前禁用）
 &sdmmc0 {
-	max-frequency = <150000000>;
-	fifo-depth = <256>;
-	no-sdio;
-	bus-width = <4>;
-	cap-mmc-highspeed;
-	cap-sd-highspeed;
-	disable-wp;
-	sd-uhs-sdr104;
-	vmmc-supply = <&vcc3v3_sd>;
-	vqmmc-supply = <&vccio_sd>;
+	max-frequency = <150000000>;         // 最大时钟频率 150MHz
+	fifo-depth = <256>;                  // FIFO 深度 256 字节
+	no-sdio;                             // 禁用 SDIO 模式
+	bus-width = <4>;                     // 总线宽度 4 位
+	cap-mmc-highspeed;                   // 支持 MMC 高速模式
+	cap-sd-highspeed;                    // 支持 SD 高速模式
+	disable-wp;                          // 禁用写保护
+	sd-uhs-sdr104;                       // 支持 UHS SDR104 模式
+	vmmc-supply = <&vcc3v3_sd>;          // 电源依赖 3.3V SD 卡电源
+	vqmmc-supply = <&vccio_sd>;          // IO 电源依赖 SD 卡 IO 电源
 	pinctrl-names = "default";
+	// 引用 SDMMC0 相关引脚配置（4 位总线、时钟、命令、检测）
 	pinctrl-0 = <&sdmmc0_bus4 &sdmmc0_clk &sdmmc0_cmd &sdmmc0_det>;
-	status = "disabled";
+	status = "disabled";                 // 禁用 SDMMC0
 };
 
+// 组合 PHY 0（用于 USB/SATA 物理层转换，已启用）
 &combphy0 {
-	status = "okay";
+	status = "okay";                     // 启用组合 PHY 0
 };
 
+// CSI DPHY 控制器（摄像头串行接口物理层，已启用）
 &csi_dphy {
-	status = "okay";
+	status = "okay";                     // 启用 CSI DPHY
 };
 
+// SFC 控制器（串行闪存控制器，用于 SPI NOR 闪存）
 &sfc {
-	status = "okay";
+	status = "okay";                     // 启用 SFC 控制器
 
+	// SPI NOR 闪存（挂载在 SFC 总线上）
 	flash@0 {
-		compatible = "spi-nor";
-		reg = <0>;
-		spi-max-frequency = <25000000>;
-		spi-rx-bus-width = <4>;
-		spi-tx-bus-width = <1>;
+		compatible = "spi-nor";            // 兼容 SPI NOR 闪存驱动
+		reg = <0>;                         // SPI 设备地址 0
+		spi-max-frequency = <25000000>;    // 最大 SPI 频率 25MHz
+		spi-rx-bus-width = <4>;            // 接收总线宽度 4 位（QPI 模式）
+		spi-tx-bus-width = <1>;            // 发送总线宽度 1 位
 	};
 };
 
+// RNG 控制器（硬件随机数发生器，用于加密运算）
 &rng {
-	status = "okay";
+	status = "okay";                     // 启用 RNG 控制器
 };
 
-//i2c@fe5a0000
+// i2c1 控制器（I2C 总线 1，地址 fe5a0000，当前禁用）
 &i2c1 {
-	status = "disabled";
+	status = "disabled";                 // 禁用 I2C1
 };
 
+// i2c4 控制器（I2C 总线 4，已启用）
 &i2c4 {
-	status = "okay";
+	status = "okay";                     // 启用 I2C4
 };
 
+// i2c5 控制器（I2C 总线 5，当前禁用）
 &i2c5 {
-	status = "disabled";
+	status = "disabled";                 // 禁用 I2C5
 };
 
+// WDT 控制器（硬件看门狗，用于系统故障自动重启）
 &wdt {
-	status = "okay";
+	status = "okay";                     // 启用硬件看门狗
 };
 
+// uart8 串口（UART 总线 8，当前禁用）
 &uart8 {
-	status = "disabled";
+	status = "disabled";                 // 禁用 UART8
 };
 
+// pwm4 控制器（当前禁用）
 &pwm4 {
-	status = "disabled";
+	status = "disabled";                 // 禁用 PWM4
 };
 
+// pwm5 控制器（当前禁用）
 &pwm5 {
-	status = "disabled";
+	status = "disabled";                 // 禁用 PWM5
 };
 
+// pwm7 控制器（当前禁用）
 &pwm7 {
-	status = "disabled";
+	status = "disabled";                 // 禁用 PWM7
 };
 
+// pwm8 控制器（当前禁用）
 &pwm8 {
-	status = "disabled";
+	status = "disabled";                 // 禁用 PWM8
 };
 
+// pwm9 控制器（当前禁用）
 &pwm9 {
-	status = "disabled";
+	status = "disabled";                 // 禁用 PWM9
 };
 
-//fe720000
+// saradc 控制器（逐次逼近模数转换器，地址 fe720000）
 &saradc {
-	status = "okay";
-	vref-supply = <&vcc1v8_adc>;
+	status = "okay";                     // 启用 SARADC
+	vref-supply = <&vcc1v8_adc>;         // 参考电压依赖 1.8V ADC 电源
 };
