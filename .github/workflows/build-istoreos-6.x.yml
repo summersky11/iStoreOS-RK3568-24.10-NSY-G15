@@ -1,137 +1,215 @@
-name: Build iStore OS 6.x
+# 工作流名称：构建 iStore OS 6.x-MTKWIFI 固件
+name: Build iStore OS 6.x-MTKWIFI
 
+# 触发工作流的条件
 on:
+  # 1. 仓库调度触发（外部/其他工作流触发）
   repository_dispatch:
+  # 2. 手动触发（在GitHub仓库Actions页面手动点击运行）
   workflow_dispatch:
+    # 以下为注释掉的SSH输入配置（如需远程连接调试可启用）
     # inputs:
       # ssh:
         # description: 'SSH connection to Actions'
         # required: false
         # default: 'false'
+  # 3. 定时触发（Cron表达式，UTC时间16:00 = 北京时间00:00）
   schedule:
    - cron: 0 16 * * *
 
+# 全局环境变量配置（整个工作流可共享）
 env:
-  REPO_URL: https://github.com/istoreos/istoreos
-  # REPO_BRANCH: main
-  FEEDS_CONF: feeds.conf
-  CONFIG_FILE: .config
-  DIY_P1_SH: diy-part1-6.x.sh
-  DIY_P2_SH: diy-part2-6.x.sh
-  UPLOAD_BIN_DIR: true
-  UPLOAD_FIRMWARE: true
-  UPLOAD_RELEASE: true
-  TZ: Asia/Shanghai
-  GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+  REPO_URL: https://github.com/istoreos/istoreos  # iStore OS 源码仓库地址
+  # REPO_BRANCH: main  # 注释掉的默认源码分支
+  FEEDS_CONF: feeds.conf  # 软件源配置文件名
+  CONFIG_FILE: .config  # 固件编译配置文件名
+  DIY_P1_SH: diy-part1-6.x.sh  # 第一阶段自定义脚本（前期准备）
+  DIY_P2_SH: diy-part3-6.x-mtkwifi.sh  # 第二阶段自定义脚本（联发科WiFi专属配置）
+  UPLOAD_BIN_DIR: true  # 是否上传完整的bin编译目录
+  UPLOAD_FIRMWARE: true  # 是否上传整理后的固件文件
+  UPLOAD_RELEASE: true  # 是否自动发布固件到GitHub Releases
+  TZ: Asia/Shanghai  # 构建环境时区设置（北京时间）
+  GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }}  # GitHub访问令牌（用于操作Releases、删除旧记录等）
 
+# 定义工作流任务（核心执行步骤）
 jobs:
+  # 单个任务：构建固件（任务名称为build）
   build:
+    # 任务运行的虚拟机环境（由matrix矩阵动态指定）
     runs-on: ${{ matrix.os }}
+    # 矩阵配置（多参数组合执行，此处实际为单组合，便于后续扩展）
     strategy:
       matrix:
+        # 源码分支选择（启用istoreos-24.10分支，注释掉其他分支）
         REPO_BRANCH:
           # - main
           - istoreos-24.10
           # - istoreos-23.05
+        # 固件架构选择（ARMv8架构，适配主流嵌入式设备）
         ARCHITECTURE:
           - armv8
+        # 构建系统环境选择（Ubuntu 22.04 LTS）
         os:
           - ubuntu-22.04
 
+      # 关闭快速失败：某个矩阵组合执行失败，不影响其他组合（此处单组合，无实际影响）
       fail-fast: false
 
+    # 任务执行步骤（按顺序依次运行）
     steps:
+    # 步骤1：合并虚拟机磁盘空间（解决编译固件磁盘不足问题）
     - name: 合并磁盘
-      uses: easimon/maximize-build-space@master
+      uses: easimon/maximize-build-space@master  # 调用第三方磁盘扩容Action
       with:
-        swap-size-mb: 1024
-        temp-reserve-mb: 100
-        root-reserve-mb: 1024
+        swap-size-mb: 1024  # 设置交换分区大小1024MB
+        temp-reserve-mb: 100  # 预留临时目录空间100MB
+        root-reserve-mb: 1024  # 预留根目录空间1024MB
 
+    # 步骤2：检出当前仓库代码（获取编译所需的脚本、配置文件等）
     - name: 准备完成
-      uses: actions/checkout@main
+      uses: actions/checkout@main  # 调用GitHub官方检出代码Action
 
+    # 步骤3：创建工作目录（用于存放源码和编译产物）
     - name: 创建工作目录
       run: |
+        # 创建工作目录（路径：GitHub工作空间/workdir）
         mkdir -p ${GITHUB_WORKSPACE}/workdir
+        # 设置目录权限为755（所有者可读可写可执行，其他用户可读可执行）
         chmod 755 ${GITHUB_WORKSPACE}/workdir
+        # 将工作目录路径写入环境变量，后续步骤可复用
         echo "WORKDIR=$PWD" >> $GITHUB_ENV
 
+    # 步骤4：检查服务器配置（查看CPU、内存、磁盘信息，确认编译环境是否满足要求）
     - name: 检查服务器配置
       run: |
         echo "若分配的服务器性能不足，务必及时取消，重新运行！"
         echo -e "------------------------------- CPU信息 -------------------------------\n"
+        # 查看CPU物理核心数量
         echo "CPU物理数量:$(cat /proc/cpuinfo| grep "physical id"| sort| uniq| wc -l)"
+        # 查看CPU型号和逻辑核心数量
         echo -e "CPU核心及版本信息: $(cat /proc/cpuinfo | grep name | cut -f2 -d: | uniq -c) \n"
         echo -e "------------------------------- 内存信息 -------------------------------\n"
         echo "已安装内存详细信息: "
+        # 查看内存详细信息（仅显示GiB单位）
         sudo lshw -short -C memory | grep GiB
         echo -e "\n"
         echo -e "------------------------------- 磁盘信息 -------------------------------\n"
+        # 查看磁盘数量
         echo -e "磁盘数量: $(ls /dev/sd* | grep -v [1-9] | wc -l) \n"
         echo "------------------------------- 磁盘详情 -------------------------------\n"
+        # 查看磁盘挂载、容量、文件系统类型
         df -Th
 
+    # 步骤5：初始化编译环境（安装依赖、清理冗余软件、设置时区）
     - name: 初始化编译环境
       env:
+        # 禁用Debian/Ubuntu交互式配置（避免编译过程中卡住）
         DEBIAN_FRONTEND: noninteractive
       run: |
         echo "------------------------------- 更新并安装依赖 -------------------------------"
+        # 删除冗余配置和预安装软件（释放磁盘空间）
         sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /etc/mysql /etc/php /usr/local/lib/android /opt/ghc
+        # 静默更新apt软件源（-qq：静默模式，减少输出）
         sudo -E apt-get -qq update
+        # 静默安装编译所需依赖（依赖列表来自当前仓库的depends目录对应系统文件）
         sudo -E apt-get -qq install $(cat $GITHUB_WORKSPACE/depends/${{ matrix.os }})
+        # 下载并安装pip（Python包管理工具）
         wget https://bootstrap.pypa.io/pip/3.6/get-pip.py
         sudo python3 get-pip.py
         sudo rm -rf get-pip.py
+        # 安装编译所需的Python包（pyelftools：用于解析ELF文件）
         sudo pip install pyelftools
         echo "------------------------------- 清理Docker镜像和软件 -------------------------------"
+        # 删除所有Docker镜像（释放大量磁盘空间）
         docker rmi `docker images -q`
         docker image prune -a -f
+        # 卸载大量冗余预安装软件（进一步释放磁盘空间）
         sudo -E apt-get -y purge azure-cli ghc* zulu* hhvm llvm* firefox google* dotnet* powershell openjdk* adoptopenjdk* mysql* php* mongodb* dotnet* moby* snapd* android* || true
+        # 自动卸载不再需要的依赖包
         sudo -E apt-get -qq autoremove --purge
+        # 清理apt缓存文件
         sudo -E apt-get -qq clean
         echo "------------------------------- 设置时区 -------------------------------"
+        # 将系统时区设置为全局环境变量中定义的时区（北京时间）
         sudo timedatectl set-timezone "$TZ"
 
+    # 步骤6：克隆iStore OS源码（从官方仓库拉取指定分支的源码）
     - name: 克隆源码
-      working-directory: ${{ env.WORKDIR }}/workdir
+      working-directory: ${{ env.WORKDIR }}/workdir  # 切换到工作目录执行命令
       run: |
+        # 查看当前目录磁盘使用情况
         df -hT $PWD
+        # 克隆源码仓库，指定分支（matrix中配置的REPO_BRANCH），目录名openwrt
         git clone $REPO_URL -b ${{ matrix.REPO_BRANCH }} openwrt
+        # 创建软链接（将源码目录链接到GitHub工作空间，方便后续步骤访问）
         ln -sf ${{ env.WORKDIR }}/workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
+    # 步骤7：缓存构建动作（缓存编译过程中的中间文件，加速后续构建）
     - name: 缓存构建动作
-      uses: klever1988/cachewrtbuild@main
+      uses: klever1988/cachewrtbuild@main  # 调用OpenWrt编译缓存专用Action
       with:
-        ccache: 'true'
-        mixkey: ${{ matrix.os }}-${{ matrix.ARCHITECTURE }}-${{ matrix.REPO_BRANCH }}
+        ccache: 'true'  # 启用ccache编译缓存
+        # 缓存密钥（包含系统、架构、分支、固件类型，确保缓存唯一性）
+        mixkey: ${{ matrix.os }}-${{ matrix.ARCHITECTURE }}-${{ matrix.REPO_BRANCH }}-mtkwifi
+        # 缓存目录（源码根目录）
         prefix: ${{ github.workspace }}/openwrt
 
+    # 步骤8：加载自定义feeds（配置软件源，执行第一阶段自定义脚本）
     - name: 加载自定义 feeds
       env:
+        # 拼接自定义feeds配置文件路径（架构/feeds.conf）
         FEEDS_CONF_PATH: ${{ matrix.ARCHITECTURE }}/${{ env.FEEDS_CONF }}
       run: |
+        # 若自定义feeds配置文件存在，移动到源码目录覆盖默认配置
         [ -e $FEEDS_CONF_PATH ] && mv $FEEDS_CONF_PATH openwrt/$FEEDS_CONF
+        # 给第一阶段自定义脚本添加可执行权限
         chmod +x $DIY_P1_SH
+        # 切换到源码目录
         cd openwrt
+        # 执行第一阶段自定义脚本（通常用于添加自定义软件源、修改默认配置等）
         $GITHUB_WORKSPACE/$DIY_P1_SH
 
+    # 步骤9：更新feeds软件源（拉取最新的软件包列表）
     - name: 更新 feeds
-      run: cd openwrt && ./scripts/feeds update -a
+      run: cd openwrt && ./scripts/feeds update -a  # 执行OpenWrt自带脚本，更新所有feeds
 
+    # 步骤10：安装feeds软件包（将软件包安装到源码目录，供编译使用）
     - name: 安装 feeds
-      run: cd openwrt && ./scripts/feeds install -a
+      run: cd openwrt && ./scripts/feeds install -a  # 执行OpenWrt自带脚本，安装所有feeds软件包
 
+    # 步骤11：加载自定义配置（配置固件机型、功能，执行第二阶段自定义脚本）
     - name: 加载自定义配置
       env:
+        # 拼接自定义编译配置文件路径（架构/.config）
         CONFIG_FILE_PATH: ${{ matrix.ARCHITECTURE }}/${{ env.CONFIG_FILE }}
       run: |
+        # 确保当前目录可写（避免权限不足导致配置文件无法修改）
+        sudo chmod -R +w ./
+        # 删除源码中默认的mt76无线驱动（替换为联发科闭源驱动）
+        rm -rf openwrt/package/kernel/mt76/*
+        # 给用户补丁目录添加可执行权限
+        sudo chmod -R 775 $GITHUB_WORKSPACE/configfiles/userpatches/zhoufuli/
+        # 复制联发科WiFi专属补丁到源码目录（保留目录结构，显示进度）
+        rsync -av --progress $GITHUB_WORKSPACE/configfiles/userpatches/zhoufuli/ openwrt/
+        # 若存在自定义files目录（固件内置文件），移动到源码目录
         [ -e files ] && mv files openwrt/files
+        # 若自定义编译配置文件存在，移动到源码目录覆盖默认配置
         [ -e $CONFIG_FILE_PATH ] && mv $CONFIG_FILE_PATH openwrt/$CONFIG_FILE
+        # 注释掉默认的rockchip armv8机型配置（避免冲突，启用自定义机型）
+        sed -i -E 's/^(CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_[_a-zA-Z0-9-]+)=y$/# \1 is not set/' openwrt/.config
+        # 读取联发科WiFi机型配置，追加到源码编译配置中
+        getconfig=$(cat ${GITHUB_WORKSPACE}/armv8/g68_mtk_wifi.config)
+        echo "$getconfig" >> openwrt/.config
+        # 读取自定义内核配置，追加到对应架构的内核配置文件中
+        cat "${GITHUB_WORKSPACE}/configfiles/config-6.6.local" >> openwrt/target/linux/rockchip/armv8/config-6.6
+        # 给第二阶段自定义脚本添加可执行权限
         chmod +x $DIY_P2_SH
+        # 切换到源码目录
         cd openwrt
+        # 执行第二阶段自定义脚本（联发科WiFi专属配置、固件优化等）
         $GITHUB_WORKSPACE/$DIY_P2_SH
 
+    # 注释掉的SSH连接步骤（如需远程调试编译环境可启用，需配置Telegram通知）
     # - name: SSH 连接到 Actions
       # uses: P3TERX/ssh2actions@main
       # if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh  != 'false') || contains(github.event.action, 'ssh')
@@ -139,57 +217,93 @@ jobs:
         # TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         # TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
+    # 步骤12：下载软件包（预下载编译所需的所有软件包，避免编译过程中网络问题）
     - name: 下载软件包
-      id: package
+      id: package  # 步骤ID，用于后续步骤判断执行结果
       run: |
+        # 切换到源码目录
         cd openwrt
+        # 生成最终编译配置（根据.config文件生成完整配置）
         make defconfig
+        # 并行下载软件包（-j8：8线程下载，提高效率）
         make download -j8
+        # 查找下载目录中小于1024字节的文件（可能是下载失败的残缺文件）
         find dl -size -1024c -exec ls -l {} \;
+        # 删除下载失败的残缺文件
         find dl -size -1024c -exec rm -f {} \;
 
+    # 步骤13：编译固件（核心步骤，执行OpenWrt编译命令）
     - name: 编译固件
-      id: compile
+      id: compile  # 步骤ID，用于后续步骤判断执行结果
       run: |
+        # 切换到源码目录
         cd openwrt
+        # 打印当前CPU核心数，用于并行编译
         echo -e "$(nproc) thread compile"
-        make -j$(nproc) || make -j1 || make -j1 V=s
+        # 第一步：多线程编译（使用所有CPU核心，提高编译速度）
+        make -j$(nproc) || \
+        # 第二步：单线程编译（若多线程编译失败，切换单线程重试）
+        make -j1 || \
+        # 第三步：单线程详细输出编译（若仍失败，输出详细日志便于排错）
+        make -j1 V=s
+        # 生成编译时间戳，写入环境变量（用于固件命名）
         echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
+        # 标记编译成功，写入步骤输出结果
         echo "status=success" >> ${GITHUB_OUTPUT}
 
+    # 步骤14：检查磁盘空间（编译完成后，查看磁盘使用情况）
     - name: 检查磁盘空间
-      if: (!cancelled())
-      run: df -hT
+      if: (!cancelled())  # 条件：工作流未被手动取消时执行
+      run: df -hT  # 查看磁盘挂载、容量、文件系统类型
 
+    # 步骤15：上传bin文件夹（上传完整的编译产物目录，包含中间文件和固件）
     - name: 上传 bin 文件夹
-      uses: actions/upload-artifact@main
+      uses: actions/upload-artifact@main  # 调用GitHub官方上传产物Action
+      # 条件：编译成功 且 启用UPLOAD_BIN_DIR配置
       if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
       with:
+        # 上传产物名称（包含编译时间戳）
         name: OpenWrt_bin${{ env.FILE_DATE }}
+        # 上传文件路径（源码目录下的bin文件夹）
         path: openwrt/bin
 
+    # 步骤16：整理固件文件（筛选出可用的固件文件，删除冗余的packages目录）
     - name: 整理固件文件
-      id: organize
+      id: organize  # 步骤ID，用于后续步骤判断执行结果
+      # 条件：启用UPLOAD_FIRMWARE配置 且 工作流未被手动取消
       if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
       run: |
+        # 切换到固件输出目录（openwrt/bin/targets/架构/机型）
         cd openwrt/bin/targets/*/*
+        # 删除packages目录（软件包目录，体积大且非必需）
         rm -rf packages
+        # 将固件目录路径写入环境变量，后续步骤可复用
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
+        # 标记整理成功，写入步骤输出结果
         echo "status=success" >> ${GITHUB_OUTPUT}
 
+    # 步骤17：上传固件目录（上传整理后的可用固件文件）
     - name: 上传固件目录
-      uses: actions/upload-artifact@main
+      uses: actions/upload-artifact@main  # 调用GitHub官方上传产物Action
+      # 条件：固件整理成功 且 工作流未被手动取消
       if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
+        # 上传产物名称（包含编译时间戳）
         name: OpenWrt_firmware${{ env.FILE_DATE }}
+        # 上传文件路径（整理后的固件目录）
         path: ${{ env.FIRMWARE }}
 
+    # 步骤18：生成发布标签（创建Releases标签和说明文档）
     - name: 生成发布标签
-      id: tag
+      id: tag  # 步骤ID，用于后续步骤判断执行结果
+      # 条件：编译成功 且 启用UPLOAD_RELEASE配置 且 工作流未被手动取消
       if: steps.compile.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true' && !cancelled()
       run: |
-        echo "release_tag=$(date +"%Y.%m.%d-%H.%M")-${{ matrix.ARCHITECTURE }}" >> ${GITHUB_OUTPUT}
+        # 生成Releases标签名称（包含时间戳、架构、固件类型）
+        echo "release_tag=$(date +"%Y.%m.%d-%H.%M")-${{ matrix.ARCHITECTURE }}-mtkwifi" >> ${GITHUB_OUTPUT}
+        # 创建发布说明文件
         touch release.txt
+        # 写入发布说明内容（架构、源码、分支、编译时间、管理地址等）
         echo "
         💻 架构: ${{ matrix.ARCHITECTURE }}
 
@@ -205,27 +319,36 @@ jobs:
 
         🔒 密码: password
 
-        📒 说明: 单网口设备默认网口为LAN，旁路由模式，需要接入主路由器后进后台查找对应IP地址访问，反之双网口设备默认网口为WAN+LAN，主路由模式。 " >> release.txt
+        📒 说明: 单网口设备默认网口为LAN，旁路由模式，需要接入主路由器后进后台查找对应IP地址访问，反之双网口设备默认网口为WAN+LAN，主路由模式，下面的镜像文件都是集成联发科闭源WiFi驱动的固件，注意不可与开源WiFi驱动版本通刷 " >> release.txt
+        # 标记标签生成成功，写入步骤输出结果
         echo "status=success" >> ${GITHUB_OUTPUT}
 
+    # 步骤19：自动发布固件到Releases（将整理后的固件上传到GitHub Releases）
     - name: 自动发布固件到 Releases
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@v2  # 调用第三方Releases发布Action
+      # 条件：标签生成成功 且 工作流未被手动取消
       if: steps.tag.outputs.status == 'success' && !cancelled()
       with:
+        # Releases标签名称（使用步骤18生成的标签）
         tag_name: ${{ steps.tag.outputs.release_tag }}
+        # Releases正文内容（使用步骤18生成的release.txt文件）
         body_path: release.txt
+        # 上传到Releases的文件（整理后的所有固件文件）
         files: ${{ env.FIRMWARE }}/*
 
+    # 步骤20：删除运行记录（清理旧的GitHub Actions运行记录，节省存储空间）
     - name: 删除运行记录
-      uses: xiaomeng9597/delete-workflow-runs@main
+      uses: xiaomeng9597/delete-workflow-runs@main  # 调用第三方删除运行记录Action
       with:
-        retain_days: 20
-        keep_minimum_runs: 15
-        token: ${{ env.GITHUB_TOKEN }}
+        retain_days: 20  # 保留最近20天的运行记录
+        keep_minimum_runs: 15  # 至少保留15条运行记录（即使超过20天）
+        token: ${{ env.GITHUB_TOKEN }}  # 访问令牌（用于操作仓库）
 
+    # 步骤21：删除自动发布的旧固件（清理旧的Releases，节省存储空间）
     - name: 删除自动发布的旧固件
-      uses: dev-drprasad/delete-older-releases@v0.3.3
+      uses: dev-drprasad/delete-older-releases@v0.3.3  # 调用第三方删除旧Releases Action
+      # 条件：启用UPLOAD_RELEASE配置 且 工作流未被手动取消
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       with:
-        keep_latest: 60
-        delete_tags: true
+        keep_latest: 60  # 保留最近60个Releases（固件版本）
+        delete_tags: true  # 同时删除对应的Git标签
